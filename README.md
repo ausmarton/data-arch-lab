@@ -50,6 +50,23 @@ To get all resources:
 ```bash
 kubectl --namespace kafka-cluster get all
 ```
+To log into a pod:
+```bash
+kubectl exec --namespace kafka-cluster -it kafka-0 -- /bin/bash
+```
+
+To list broker configs:
+```bash
+kafka-configs.sh --bootstrap-server localhost:9092 --describe --entity-type brokers
+```
+To list features of kafka (not sure what this is supposed to print)
+```bash
+kafka-features.sh --bootstrap-server localhost:9092 describe
+```
+To list topics:
+```bash
+kafka-topics.sh --list --bootstrap-server localhost:9092
+```
 
 ## Issues
 Brokers appear to be throwing exceptions:
