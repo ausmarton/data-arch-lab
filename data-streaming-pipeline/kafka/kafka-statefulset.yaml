@@ -26,7 +26,11 @@ spec:
         - name: KAFKA_BROKER_ID
           valueFrom:
             fieldRef:
-              fieldPath: metadata.labels['apps.kubernetes.io/pod-index'] 
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: KAFKA_ZOOKEEPER_CONNECT
           value: "zookeeper-service:2181"
         - name: KAFKA_LOG_DIRS
@@ -34,7 +38,7 @@ spec:
         - name: KAFKA_LISTENERS
           value: "INTERNAL://:9092,EXTERNAL://:9093"
         - name: KAFKA_ADVERTISED_LISTENERS
-          value: "INTERNAL://kafka-broker-${KAFKA_BROKER_ID}.kafka-headless.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://kafka-broker-${KAFKA_BROKER_ID}.kafka-headless.streaming-pipeline.svc.cluster.local:9093"
+          value: "INTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9093"
         - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "INTERNAL:SSL,EXTERNAL:SSL"
         - name: KAFKA_INTER_BROKER_LISTENER_NAME
@@ -43,10 +47,6 @@ spec:
           value: "kafka-broker-${KAFKA_BROKER_ID}.keystore.p12"
         - name: KAFKA_SSL_TRUSTSTORE_FILENAME
           value: "kafka-broker-${KAFKA_BROKER_ID}.truststore.p12"
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
         volumeMounts:
         - name: kafka-data
           mountPath: /var/lib/kafka/data
