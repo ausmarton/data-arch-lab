@@ -34,11 +34,15 @@ spec:
         - name: KAFKA_LISTENERS
           value: "INTERNAL://:9092,EXTERNAL://:9093"
         - name: KAFKA_ADVERTISED_LISTENERS
-          value: "INTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9093"
+          value: "INTERNAL://kafka-broker-${KAFKA_BROKER_ID}.kafka-headless.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://kafka-broker-${KAFKA_BROKER_ID}.kafka-headless.streaming-pipeline.svc.cluster.local:9093"
         - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "INTERNAL:SSL,EXTERNAL:SSL"
         - name: KAFKA_INTER_BROKER_LISTENER_NAME
           value: "INTERNAL"
+        - name: KAFKA_SSL_KEYSTORE_FILENAME
+          value: "kafka-broker-${KAFKA_BROKER_ID}.keystore.p12"
+        - name: KAFKA_SSL_TRUSTSTORE_FILENAME
+          value: "kafka-broker-${KAFKA_BROKER_ID}.truststore.p12"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -56,9 +60,14 @@ spec:
         configMap:
           name: kafka-config
       - name: kafka-certs
-        secret:
-          secretName: kafka-broker-0-tls
-          # secretName: kafka-broker-${apps.kubernetes.io/pod-index}-tls
+        projected:
+          sources:
+          - secret:
+              name: kafka-broker-0-tls
+          - secret:
+              name: kafka-broker-1-tls
+          - secret:
+              name: kafka-broker-2-tls
   volumeClaimTemplates:
   - metadata:
       name: kafka-data
