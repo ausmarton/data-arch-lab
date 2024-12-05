@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: producer-config
+  namespace: kafka
+data:
+  config.properties: |
+    security.protocol=SSL
+    ssl.truststore.location=/etc/producer/tls/truststore.jks
+    ssl.truststore.password=kafkatruststorepassword
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: consumer-config
+  namespace: kafka
+data:
+  config.properties: |
+    security.protocol=SSL
+    ssl.truststore.location=/etc/consumer/tls/truststore.jks
+    ssl.truststore.password=kafkatruststorepassword

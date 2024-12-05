@@ -1,0 +1,56 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-0
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-broker-0-tls
+  duration: 8760h # 1 year
+  renewBefore: 360h # 15 days
+  commonName: kafka-broker-0
+  dnsNames:
+  - kafka-broker-0
+  - kafka-broker-0.kafka-headless
+  - kafka-broker-0.kafka-headless.streaming-pipeline.svc.cluster.local
+  - "*.kafka-headless.streaming-pipeline.svc.cluster.local"
+  issuerRef:
+    name: kafka-ca-issuer
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-1
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-broker-1-tls
+  duration: 8760h
+  renewBefore: 360h
+  commonName: kafka-broker-1
+  dnsNames:
+  - kafka-broker-1
+  - kafka-broker-1.kafka-headless
+  - kafka-broker-1.kafka-headless.streaming-pipeline.svc.cluster.local
+  - "*.kafka-headless.streaming-pipeline.svc.cluster.local"
+  issuerRef:
+    name: kafka-ca-issuer
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-2
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-broker-2-tls
+  duration: 8760h
+  renewBefore: 360h
+  commonName: kafka-broker-2
+  dnsNames:
+  - kafka-broker-2
+  - kafka-broker-2.kafka-headless
+  - kafka-broker-2.kafka-headless.streaming-pipeline.svc.cluster.local
+  - "*.kafka-headless.streaming-pipeline.svc.cluster.local"
+  issuerRef:
+    name: kafka-ca-issuer
+    kind: Issuer
