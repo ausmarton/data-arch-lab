@@ -1,0 +1,55 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-certificates
+  duration: 8760h
+  renewBefore: 360h
+  subject:
+    organizations:
+    - Kafka
+  commonName: kafka
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+  - kafka
+  - kafka.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mongodb-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: mongodb-certificates
+  duration: 8760h
+  renewBefore: 360h
+  subject:
+    organizations:
+    - MongoDB
+  commonName: mongodb
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+  - mongodb
+  - mongodb.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer

@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: streaming-pipeline
+---
+# Create a self-signed Issuer for cert-manager
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: self-signed-issuer
+spec:
+  selfSigned: {}
+---
+# Create a CA Issuer
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-ca
+  namespace: streaming-pipeline
+spec:
+  isCA: true
+  duration: 2160h # 90d
+  secretName: kafka-ca-secret
+  commonName: kafka-ca
+  issuerRef:
+    name: self-signed-issuer
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kafka-issuer
+  namespace: streaming-pipeline
+spec:
+  ca:
+    secretName: kafka-ca-secret
+---
+# Create Certificates for brokers and clients
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-cert
+  namespace: streaming-pipeline
+spec:
+  duration: 2160h
+  secretName: kafka-broker-secret
+  commonName: kafka-broker
+  dnsNames:
+    - kafka-broker.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-client-cert
+  namespace: streaming-pipeline
+spec:
+  duration: 2160h
+  secretName: kafka-client-secret
+  commonName: kafka-client
+  dnsNames:
+    - kafka-client.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer
+---
+# ConfigMap for Kafka configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: streaming-pipeline
+data:
+  server.properties: |
+    broker.id=1
+    listeners=SSL://:9092
+    advertised.listeners=SSL://kafka-broker.streaming-pipeline.svc.cluster.local:9092
+    listener.security.protocol.map=SSL:SSL
+    inter.broker.listener.name=SSL
+    log.dirs=/var/lib/kafka
+    zookeeper.connect=zookeeper:2181
+    ssl.keystore.location=/etc/kafka/ssl/kafka.keystore.jks
+    ssl.keystore.password=password
+    ssl.key.password=password
+    ssl.truststore.location=/etc/kafka/ssl/kafka.truststore.jks
+    ssl.truststore.password=password
+---
+# Kafka StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: streaming-pipeline
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: bitnami/kafka:latest
+          env:
+            - name: KAFKA_CFG_LOG_DIRS
+              value: /var/lib/kafka
+          ports:
+            - containerPort: 9092
+              name: kafka
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka
+            - name: kafka-config
+              mountPath: /etc/kafka
+      volumes:
+        - name: kafka-config
+          configMap:
+            name: kafka-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Zookeeper Deployment for Kafka coordination
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: streaming-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: bitnami/zookeeper:latest
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+---
+# Kafka Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-broker
+  namespace: streaming-pipeline
+spec:
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+  selector:
+    app: kafka
+---
+# Zookeeper Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: streaming-pipeline
+spec:
+  ports:
+    - name: zookeeper
+      port: 2181
+      targetPort: 2181
+  selector:
+    app: zookeeper

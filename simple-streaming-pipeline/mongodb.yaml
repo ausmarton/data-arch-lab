@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: streaming-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:latest
+        ports:
+        - containerPort: 27017
+        args:
+        - "--tlsMode"
+        - "requireTLS"
+        - "--tlsCertificateKeyFile"
+        - "/etc/mongodb/certificates/mongodb.pem"
+        - "--tlsCAFile"
+        - "/etc/mongodb/certificates/ca.crt"
+        volumeMounts:
+        - name: mongodb-certificates
+          mountPath: /etc/mongodb/certificates
+          readOnly: true
+      volumes:
+      - name: mongodb-certificates
+        secret:
+          secretName: mongodb-certificates
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: streaming-pipeline
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
