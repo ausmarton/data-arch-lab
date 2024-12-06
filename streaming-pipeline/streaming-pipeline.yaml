@@ -47,7 +47,7 @@ spec:
   ports:
     - port: 2181
       targetPort: 2181
-  # clusterIP: None
+  clusterIP: None
   selector:
     app: zookeeper
 ---
@@ -153,6 +153,7 @@ metadata:
   name: kafka-broker
   namespace: streaming-pipeline
 spec:
+  clusterIP: None
   ports:
     - port: 9093
       name: kafka-tls
