@@ -47,7 +47,7 @@ spec:
   ports:
     - port: 2181
       targetPort: 2181
-  clusterIP: None
+  # clusterIP: None
   selector:
     app: zookeeper
 ---
@@ -111,6 +111,13 @@ spec:
           image: confluentinc/cp-zookeeper:latest
           ports:
             - containerPort: 2181
+              name: client-port
+            - containerPort: 2888
+              name: election-port
+            - containerPort: 3888
+              name: leader-election # Port for leader election
+            - containerPort: 2281
+              name: secure-client # Secure port for mTLS
           volumeMounts:
             - name: secrets-volume
               mountPath: /etc/zookeeper/secrets/jks
@@ -129,6 +136,10 @@ spec:
               value: "changeit"
             - name: ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD
               value: "changeit"
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"  # Regular client port
+            - name: ZOOKEEPER_SECURE_CLIENT_PORT
+              value: "2281"  # Secure client port for mTLS
       volumes:
         - name: zookeeper-tls
           secret:
@@ -221,7 +232,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: KAFKA_ZOOKEEPER_CONNECT
-              value: "zookeeper.streaming-pipeline.svc.cluster.local:2181"
+              value: "zookeeper.streaming-pipeline.svc.cluster.local:2281"
             - name: KAFKA_ADVERTISED_LISTENERS
               value: "SSL://kafka-broker.streaming-pipeline.svc.cluster.local:9093"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
