@@ -1,0 +1,192 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: streaming-pipeline
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-broker-tls
+  commonName: kafka-broker.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - kafka-broker.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  usages:
+    - server auth
+    - client auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-broker
+  namespace: streaming-pipeline
+spec:
+  ports:
+    - port: 9093
+      name: kafka-tls
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: streaming-pipeline
+spec:
+  serviceName: kafka-broker
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.4.0
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: broker-tls
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+          env:
+            - name: KAFKA_BROKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: zookeeper:2181
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "SSL://kafka-broker.streaming-pipeline.svc.cluster.local:9093"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "SSL:SSL"
+            - name: KAFKA_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/tls.keystore.jks"
+            - name: KAFKA_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-broker-tls
+                  key: keystore-password
+            - name: KAFKA_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/tls.truststore.jks"
+            - name: KAFKA_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-broker-tls
+                  key: truststore-password
+            - name: KAFKA_SSL_CLIENT_AUTH
+              value: "required"
+      volumes:
+        - name: broker-tls
+          secret:
+            secretName: kafka-broker-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-producer-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-producer-tls
+  commonName: kafka-producer.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - kafka-producer.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  usages:
+    - client auth
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-consumer-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-consumer-tls
+  commonName: kafka-consumer.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - kafka-consumer.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  usages:
+    - client auth
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-producer
+  namespace: streaming-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-producer
+  template:
+    metadata:
+      labels:
+        app: kafka-producer
+    spec:
+      containers:
+        - name: producer
+          image: confluentinc/cp-kafka:7.4.0
+          command: ["sh", "-c"]
+          args:
+            - |
+              /usr/bin/kafka-console-producer \
+              --broker-list kafka-broker.streaming-pipeline.svc.cluster.local:9093 \
+              --producer.config /etc/kafka/secrets/producer.properties \
+              --topic test
+          volumeMounts:
+            - name: producer-tls
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+      volumes:
+        - name: producer-tls
+          secret:
+            secretName: kafka-producer-tls
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer
+  namespace: streaming-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-consumer
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer
+    spec:
+      containers:
+        - name: consumer
+          image: confluentinc/cp-kafka:7.4.0
+          command: ["sh", "-c"]
+          args:
+            - |
+              /usr/bin/kafka-console-consumer \
+              --bootstrap-server kafka-broker.streaming-pipeline.svc.cluster.local:9093 \
+              --consumer.config /etc/kafka/secrets/consumer.properties \
+              --topic test
+          volumeMounts:
+            - name: consumer-tls
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+      volumes:
+        - name: consumer-tls
+          secret:
+            secretName: kafka-consumer-tls
+
