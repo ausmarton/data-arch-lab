@@ -49,6 +49,43 @@ spec:
       labels:
         app: kafka
     spec:
+      initContainers:
+        - name: setup-keystore
+          image: openjdk:11-jre
+          command: ["sh", "-c"]
+          args:
+            - |
+              # Convert PEM to PKCS12 for keystore
+              openssl pkcs12 -export \
+                -in /etc/kafka/secrets/tls.crt \
+                -inkey /etc/kafka/secrets/tls.key \
+                -out /tmp/kafka-broker.p12 \
+                -name kafka-broker \
+                -password pass:$PASSWORD;
+
+              # Create the keystore
+              keytool -importkeystore \
+                -deststorepass $PASSWORD \
+                -destkeypass $PASSWORD \
+                -destkeystore /etc/kafka/secrets/tls.keystore.jks \
+                -srckeystore /tmp/kafka-broker.p12 \
+                -srcstoretype PKCS12 \
+                -srcstorepass $PASSWORD \
+                -alias kafka-broker;
+
+              # Import CA into truststore
+              keytool -import \
+                -trustcacerts \
+                -file /etc/kafka/secrets/ca.crt \
+                -alias ca \
+                -keystore /etc/kafka/secrets/tls.truststore.jks \
+                -storepass $PASSWORD -noprompt;
+          env:
+            - name: PASSWORD
+              value: "changeit" # Replace with a secure password
+          volumeMounts:
+            - name: broker-tls
+              mountPath: /etc/kafka/secrets
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.4.0
