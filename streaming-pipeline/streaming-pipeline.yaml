@@ -67,7 +67,7 @@ spec:
               keytool -importkeystore \
                 -deststorepass $PASSWORD \
                 -destkeypass $PASSWORD \
-                -destkeystore /etc/kafka/secrets/tls.keystore.jks \
+                -destkeystore /tmp/tls.keystore.jks \
                 -srckeystore /tmp/kafka-broker.p12 \
                 -srcstoretype PKCS12 \
                 -srcstorepass $PASSWORD \
@@ -78,14 +78,21 @@ spec:
                 -trustcacerts \
                 -file /etc/kafka/secrets/ca.crt \
                 -alias ca \
-                -keystore /etc/kafka/secrets/tls.truststore.jks \
+                -keystore /tmp/tls.truststore.jks \
                 -storepass $PASSWORD -noprompt;
+
+              # Move generated files to shared volume
+              mv /tmp/tls.keystore.jks /jks/
+              mv /tmp/tls.truststore.jks /jks/
           env:
             - name: PASSWORD
               value: "changeit" # Replace with a secure password
           volumeMounts:
             - name: broker-tls
               mountPath: /etc/kafka/secrets
+              readOnly: true
+            - name: jks-volume
+              mountPath: /jks
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.4.0
@@ -95,6 +102,8 @@ spec:
             - name: broker-tls
               mountPath: /etc/kafka/secrets
               readOnly: true
+            - name: jks-volume
+              mountPath: /etc/kafka/jks
           env:
             - name: KAFKA_BROKER_ID
               valueFrom:
@@ -107,25 +116,21 @@ spec:
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: "SSL:SSL"
             - name: KAFKA_SSL_KEYSTORE_LOCATION
-              value: "/etc/kafka/secrets/tls.keystore.jks"
+              value: "/etc/kafka/jks/tls.keystore.jks"
             - name: KAFKA_SSL_KEYSTORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-broker-tls
-                  key: keystore-password
+              value: "changeit" # Replace with a secure password
             - name: KAFKA_SSL_TRUSTSTORE_LOCATION
-              value: "/etc/kafka/secrets/tls.truststore.jks"
+              value: "/etc/kafka/jks/tls.truststore.jks"
             - name: KAFKA_SSL_TRUSTSTORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-broker-tls
-                  key: truststore-password
+              value: "changeit" # Replace with a secure password
             - name: KAFKA_SSL_CLIENT_AUTH
               value: "required"
       volumes:
         - name: broker-tls
           secret:
             secretName: kafka-broker-tls
+        - name: jks-volume
+          emptyDir: {}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
