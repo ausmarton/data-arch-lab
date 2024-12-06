@@ -151,11 +151,11 @@ data:
     zookeeper.connect=zookeeper-service:2181
     zookeeper.connection.timeout.ms=18000
     group.initial.rebalance.delay.ms=0
-    ssl.keystore.location=/opt/kafka/config/certs/keystore.jks
-    ssl.keystore.password=keystore-password
+    ssl.keystore.location=/tmp/keystore.jks
+    ssl.keystore.password=changeit
     ssl.key.password=key-password
-    ssl.truststore.location=/opt/kafka/config/certs/truststore.jks
-    ssl.truststore.password=truststore-password
+    ssl.truststore.location=/tmp/truststore.jks
+    ssl.truststore.password=changeit
     ssl.client.auth=required
     ssl.endpoint.identification.algorithm=
 ---
@@ -190,6 +190,31 @@ spec:
       labels:
         app: kafka
     spec:
+      initContainers:
+      - name: create-keystore-truststore
+        image: openjdk:8-jre
+        command:
+          - /bin/sh
+          - -c
+          - |
+            # Set passwords for keystore and truststore
+            KEYSTORE_PASSWORD="changeit"
+            TRUSTSTORE_PASSWORD="changeit"
+            
+            # Create the Keystore using the broker certificate (tls.crt) and private key (tls.key)
+            keytool -genkeypair -noprompt -alias kafka-broker -keyalg RSA -keystore /tmp/keystore.jks -storepass ${KEYSTORE_PASSWORD} -keypass ${KEYSTORE_PASSWORD} -dname "CN=kafka-broker" -file /opt/kafka/config/certs/tls.crt
+            
+            # Create the Truststore using the CA certificate (ca.crt)
+            keytool -import -noprompt -alias kafka-ca -file /opt/kafka/config/certs/ca.crt -keystore /tmp/truststore.jks -storepass ${TRUSTSTORE_PASSWORD}
+            
+            # Verify the keystore and truststore have been created
+            keytool -list -keystore /tmp/keystore.jks -storepass ${KEYSTORE_PASSWORD}
+            keytool -list -keystore /tmp/truststore.jks -storepass ${TRUSTSTORE_PASSWORD}
+        volumeMounts:
+          - name: kafka-certs
+            mountPath: /opt/kafka/config/certs
+          - name: jks-stores
+            mountPath: /tmp
       containers:
       - name: kafka
         image: confluentinc/cp-kafka:6.2.0
@@ -231,6 +256,8 @@ spec:
           subPath: server.properties
         - name: kafka-certs
           mountPath: /opt/kafka/config/certs
+        - name: jks-stores
+          mountPath: /tmp
       volumes:
       - name: kafka-config
         configMap:
@@ -244,6 +271,8 @@ spec:
               name: kafka-1-tls
           - secret:
               name: kafka-2-tls
+      - name: jks-stores
+        emptyDir: {}
   volumeClaimTemplates:
   - metadata:
       name: kafka-data
