@@ -5,6 +5,65 @@ metadata:
   name: streaming-pipeline
 ---
 apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: root-ca
+  namespace: streaming-pipeline
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: root-ca-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: root-ca-key-pair
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year
+  isCA: true
+  commonName: root-ca
+  issuerRef:
+    name: root-ca
+    kind: ClusterIssuer
+---
+## Optional intermediate CA ##
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: intermediate-ca
+  namespace: streaming-pipeline
+spec:
+  ca:
+    secretName: root-ca-key-pair
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: intermediate-ca-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: intermediate-ca-key-pair
+  duration: 43800h # 5 years
+  renewBefore: 720h # 30 days
+  isCA: true
+  commonName: intermediate-ca
+  issuerRef:
+    name: intermediate-ca
+    kind: Issuer
+## Optional intermediate CA END ##
+---
+## Issuer/CA for Kafka stuff ##
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kafka-issuer
+  namespace: streaming-pipeline
+spec:
+  ca:
+    secretName: intermediate-ca-key-pair
+---
+apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: kafka-broker-cert
@@ -25,8 +84,8 @@ spec:
     - kafka-2.kafka-broker.streaming-pipeline.svc.cluster.local
     - "*.kafka-broker.streaming-pipeline.svc.cluster.local"
   issuerRef:
-    name: selfsigned-issuer
-    kind: ClusterIssuer
+    name: kafka-issuer
+    kind: Issuer
   usages:
     - server auth
     - client auth
@@ -42,8 +101,8 @@ spec:
   dnsNames:
     - zookeeper.streaming-pipeline.svc.cluster.local
   issuerRef:
-    name: selfsigned-issuer
-    kind: ClusterIssuer
+    name: kafka-issuer
+    kind: Issuer
   usages:
     - server auth
     - client auth
@@ -319,8 +378,8 @@ spec:
   dnsNames:
     - producer.streaming-pipeline.svc.cluster.local
   issuerRef:
-    name: selfsigned-issuer
-    kind: ClusterIssuer
+    name: kafka-issuer
+    kind: Issuer
   usages:
     - server auth
     - client auth
@@ -345,8 +404,8 @@ spec:
   dnsNames:
     - consumer.streaming-pipeline.svc.cluster.local
   issuerRef:
-    name: selfsigned-issuer
-    kind: ClusterIssuer
+    name: kafka-issuer
+    kind: Issuer
 ---
 apiVersion: apps/v1
 kind: Deployment
