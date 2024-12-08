@@ -435,8 +435,8 @@ spec:
               openssl pkcs12 -export \
                 -in /etc/certs/tls.crt \
                 -inkey /etc/certs/tls.key \
-                -out /tmp/kafka-broker.p12 \
-                -name kafka-broker \
+                -out /tmp/kafka-client.p12 \
+                -name kafka-client \
                 -password pass:$PASSWORD;
 
               # Create the keystore
@@ -444,10 +444,10 @@ spec:
                 -deststorepass $PASSWORD \
                 -destkeypass $PASSWORD \
                 -destkeystore /etc/kafka/secrets/jks/tls.keystore.jks \
-                -srckeystore /tmp/kafka-broker.p12 \
+                -srckeystore /tmp/kafka-client.p12 \
                 -srcstoretype PKCS12 \
                 -srcstorepass $PASSWORD \
-                -alias kafka-broker;
+                -alias kafka-client;
 
               # Import CA into truststore
               keytool -import \
@@ -467,6 +467,8 @@ spec:
       containers:
         - name: producer
           image: confluentinc/cp-kafka:7.4.0
+          # command: [ "/bin/bash", "-c", "--" ]
+          # args: [ "while true; do sleep 30; done;" ]
           command:
             - /bin/bash
             - -c
@@ -475,13 +477,16 @@ spec:
               kafka-console-producer \
                 --broker-list kafka-broker.streaming-pipeline.svc.cluster.local:9093 \
                 --producer.config /etc/producer-config/producer.properties \
-                --topic my-topic
+                --topic demo-topic < /var/producer/producer.demo
+          # kafka-console-producer --broker-list kafka-broker.streaming-pipeline.svc.cluster.local:9093 --producer.config /etc/producer-config/producer.properties --topic my-topic
           volumeMounts:
             - name: producer-config
               mountPath: /etc/producer-config
             - name: secrets-volume
               mountPath: /etc/jks
               readOnly: true
+            - name: demo-data
+              mountPath: /var/producer
       volumes:
         - name: producer-config
           configMap:
@@ -491,6 +496,9 @@ spec:
             secretName: producer-tls
         - name: secrets-volume
           emptyDir: {}
+        - name: demo-data #TODO. remove when done. Used to validate producer
+          configMap:
+            name: producer-demo-data
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -506,6 +514,19 @@ data:
     ssl.keystore.password=changeit
     ssl.key.password=changeit
     ssl.keystore.type=PKCS12
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: producer-demo-data
+  namespace: streaming-pipeline
+data:
+  producer.demo: |
+    First message
+    Second message
+    And the third message
+    Some other message which can be a long string of words that form a long sentence.
+    Final message
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -523,33 +544,47 @@ spec:
         app: kafka-consumer
     spec:
       initContainers:
-        - name: convert-certificates
-          image: alpine:latest
-          command:
-            - /bin/sh
-            - -c
+        - name: setup-keystore
+          image: openjdk:11-jre
+          command: ["sh", "-c"]
+          args:
             - |
-              apk add --no-cache openssl openjdk11
-              mkdir -p /writable-certs
-              # Convert to PKCS12
+              # Echo info for debugging:
+              ls -la /etc/certs/*
+
+              # Convert PEM to PKCS12 for keystore
               openssl pkcs12 -export \
-                -in /certs/tls.crt \
-                -inkey /certs/tls.key \
-                -out /writable-certs/keystore.p12 \
-                -name "kafka-client" \
-                -passout pass:changeit
-              # Create Truststore
-              keytool -importcert \
-                -file /certs/ca.crt \
-                -keystore /writable-certs/truststore.jks \
-                -storepass changeit \
-                -noprompt
+                -in /etc/certs/tls.crt \
+                -inkey /etc/certs/tls.key \
+                -out /tmp/kafka-client.p12 \
+                -name kafka-client \
+                -password pass:$PASSWORD;
+
+              # Create the keystore
+              keytool -importkeystore \
+                -deststorepass $PASSWORD \
+                -destkeypass $PASSWORD \
+                -destkeystore /etc/kafka/secrets/jks/tls.keystore.jks \
+                -srckeystore /tmp/kafka-client.p12 \
+                -srcstoretype PKCS12 \
+                -srcstorepass $PASSWORD \
+                -alias kafka-client;
+
+              # Import CA into truststore
+              keytool -import \
+                -trustcacerts \
+                -file /etc/certs/ca.crt \
+                -alias ca \
+                -keystore /etc/kafka/secrets/jks/tls.truststore.jks \
+                -storepass $PASSWORD -noprompt;
+          env:
+            - name: PASSWORD
+              value: "changeit" # Replace with a secure password
           volumeMounts:
-            - name: consumer-tls
-              mountPath: /certs
-              readOnly: true
-            - name: writable-certs
-              mountPath: /writable-certs
+            - name: secrets-volume
+              mountPath: /etc/kafka/secrets/jks
+            - name: client-tls
+              mountPath: /etc/certs
       containers:
         - name: consumer
           image: confluentinc/cp-kafka:7.4.0
@@ -561,22 +596,22 @@ spec:
               kafka-console-consumer \
                 --bootstrap-server kafka-broker.streaming-pipeline.svc.cluster.local:9093 \
                 --consumer.config /etc/consumer-config/consumer.properties \
-                --topic my-topic \
+                --topic demo-topic \
                 --from-beginning
           volumeMounts:
             - name: consumer-config
               mountPath: /etc/consumer-config
-            - name: writable-certs
-              mountPath: /etc/tls
+            - name: secrets-volume
+              mountPath: /etc/jks
               readOnly: true
       volumes:
         - name: consumer-config
           configMap:
             name: consumer-config
-        - name: consumer-tls
+        - name: client-tls
           secret:
             secretName: consumer-tls
-        - name: writable-certs
+        - name: secrets-volume
           emptyDir: {}
 ---
 apiVersion: v1
@@ -587,9 +622,9 @@ metadata:
 data:
   consumer.properties: |
     security.protocol=SSL
-    ssl.truststore.location=/etc/tls/truststore.jks
+    ssl.truststore.location=/etc/jks/tls.truststore.jks
     ssl.truststore.password=changeit
-    ssl.keystore.location=/etc/tls/keystore.p12
+    ssl.keystore.location=/etc/jks/tls.keystore.jks
     ssl.keystore.password=changeit
     ssl.key.password=changeit
     ssl.keystore.type=PKCS12
