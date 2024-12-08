@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: streaming-pipeline
+spec:
+  serviceName: "zookeeper"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      # initContainers:
+      #   - name: setup-keystore
+      #     image: openjdk:11-jre
+      #     command: ["sh", "-c"]
+      #     args:
+      #       - |
+      #         # Convert PEM to PKCS12 for keystore
+      #         openssl pkcs12 -export \
+      #           -in /etc/certs/tls.crt \
+      #           -inkey /etc/certs/tls.key \
+      #           -out /tmp/zookeeper.p12 \
+      #           -name zookeeper \
+      #           -password pass:$PASSWORD;
+
+      #         # Create the keystore
+      #         keytool -importkeystore \
+      #           -deststorepass $PASSWORD \
+      #           -destkeypass $PASSWORD \
+      #           -destkeystore /etc/zookeeper/secrets/jks/tls.keystore.jks \
+      #           -srckeystore /tmp/zookeeper.p12 \
+      #           -srcstoretype PKCS12 \
+      #           -srcstorepass $PASSWORD \
+      #           -alias zookeeper;
+
+      #         # Import CA into truststore
+      #         keytool -import \
+      #           -trustcacerts \
+      #           -file /etc/certs/ca.crt \
+      #           -alias ca \
+      #           -keystore /etc/zookeeper/secrets/jks/tls.truststore.jks \
+      #           -storepass $PASSWORD -noprompt;
+      #     env:
+      #       - name: PASSWORD
+      #         value: "changeit" # Replace with a secure password
+      #     volumeMounts:
+      #       - name: secrets-volume
+      #         mountPath: /etc/zookeeper/secrets/jks
+      #       - name: zookeeper-tls
+      #         mountPath: /etc/certs
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:latest
+          ports:
+            - containerPort: 2181
+              name: client-port
+            # - containerPort: 2888
+            #   name: election-port
+            # - containerPort: 3888
+            #   name: leader-election # Port for leader election
+            # - containerPort: 2281
+            #   name: secure-client # Secure port for mTLS
+          volumeMounts:
+            - name: secrets-volume
+              mountPath: /etc/zookeeper/secrets/jks
+              readOnly: true
+            - name: zookeeper-tls
+              mountPath: /etc/zookeeper/secrets/certs
+              readOnly: true
+          env:
+            # - name: ZOOKEEPER_SSL_CLIENT_AUTH
+            #   value: "need"
+            # - name: ZOOKEEPER_SSL_KEYSTORE_LOCATION
+            #   value: "/etc/zookeeper/secrets/jks/tls.keystore.jks"
+            # - name: ZOOKEEPER_SSL_TRUSTSTORE_LOCATION
+            #   value: "/etc/zookeeper/secrets/jks/tls.truststore.jks"
+            # - name: ZOOKEEPER_SSL_KEYSTORE_PASSWORD
+            #   value: "changeit"
+            # - name: ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD
+            #   value: "changeit"
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"  # Regular client port
+            # - name: ZOOKEEPER_SECURE_CLIENT_PORT
+            #   value: "2281"  # Secure client port for mTLS
+      volumes:
+        - name: zookeeper-tls
+          secret:
+            secretName: zookeeper-tls
+        - name: secrets-volume
+          emptyDir: {}

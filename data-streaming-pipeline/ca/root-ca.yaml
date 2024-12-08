@@ -1,0 +1,22 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: root-ca
+  namespace: streaming-pipeline
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: root-ca-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: root-ca-key-pair
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year
+  isCA: true
+  commonName: root-ca
+  issuerRef:
+    name: root-ca
+    kind: ClusterIssuer

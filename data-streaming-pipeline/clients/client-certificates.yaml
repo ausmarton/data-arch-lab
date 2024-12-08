@@ -1,0 +1,39 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: producer-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: producer-tls
+  commonName: producer.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - producer.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer
+  usages:
+    - server auth
+    - client auth
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: consumer-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: consumer-tls
+  duration: 24h
+  renewBefore: 12h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+  dnsNames:
+    - consumer.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer

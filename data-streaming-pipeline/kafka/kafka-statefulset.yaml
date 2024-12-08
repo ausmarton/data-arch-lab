@@ -4,7 +4,7 @@ metadata:
   name: kafka
   namespace: streaming-pipeline
 spec:
-  serviceName: "kafka-headless"
+  serviceName: kafka-broker
   replicas: 3
   selector:
     matchLabels:
@@ -14,65 +14,98 @@ spec:
       labels:
         app: kafka
     spec:
+      initContainers:
+        - name: setup-keystore
+          image: openjdk:11-jre
+          command: ["sh", "-c"]
+          args:
+            - |
+              # Convert PEM to PKCS12 for keystore
+              openssl pkcs12 -export \
+                -in /etc/certs/tls.crt \
+                -inkey /etc/certs/tls.key \
+                -out /tmp/kafka-broker.p12 \
+                -name kafka-broker \
+                -password pass:$PASSWORD;
+
+              # Create the keystore
+              keytool -importkeystore \
+                -deststorepass $PASSWORD \
+                -destkeypass $PASSWORD \
+                -destkeystore /etc/kafka/secrets/jks/tls.keystore.jks \
+                -srckeystore /tmp/kafka-broker.p12 \
+                -srcstoretype PKCS12 \
+                -srcstorepass $PASSWORD \
+                -alias kafka-broker;
+
+              # Import CA into truststore
+              keytool -import \
+                -trustcacerts \
+                -file /etc/certs/ca.crt \
+                -alias ca \
+                -keystore /etc/kafka/secrets/jks/tls.truststore.jks \
+                -storepass $PASSWORD -noprompt;
+          env:
+            - name: PASSWORD
+              value: "changeit" # Replace with a secure password
+          volumeMounts:
+            - name: secrets-volume
+              mountPath: /etc/kafka/secrets/jks
+            - name: broker-tls
+              mountPath: /etc/certs
       containers:
-      - name: kafka
-        image: confluentinc/cp-kafka:6.2.0
-        ports:
-        - containerPort: 9092
-          name: internal
-        - containerPort: 9093
-          name: external
-        env:
-        - name: KAFKA_BROKER_ID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: KAFKA_ZOOKEEPER_CONNECT
-          value: "zookeeper-service:2181"
-        - name: KAFKA_LOG_DIRS
-          value: "/var/lib/kafka/data"
-        - name: KAFKA_LISTENERS
-          value: "INTERNAL://:9092,EXTERNAL://:9093"
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: "INTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://$(POD_NAME).kafka-headless.streaming-pipeline.svc.cluster.local:9093"
-        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-          value: "INTERNAL:SSL,EXTERNAL:SSL"
-        - name: KAFKA_INTER_BROKER_LISTENER_NAME
-          value: "INTERNAL"
-        - name: KAFKA_SSL_KEYSTORE_FILENAME
-          value: "kafka-broker-${KAFKA_BROKER_ID}.keystore.p12"
-        - name: KAFKA_SSL_TRUSTSTORE_FILENAME
-          value: "kafka-broker-${KAFKA_BROKER_ID}.truststore.p12"
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /var/lib/kafka/data
-        - name: kafka-config
-          mountPath: /opt/kafka/config/server.properties
-          subPath: server.properties
-        - name: kafka-certs
-          mountPath: /opt/kafka/config/certs
+        - name: kafka
+          image: confluentinc/cp-kafka:7.4.0
+          ports:
+          - containerPort: 9092
+            name: internal
+          - containerPort: 9093
+            name: external
+          volumeMounts:
+            - name: secrets-volume
+              mountPath: /etc/kafka/secrets/jks
+              readOnly: true
+            - name: broker-tls
+              mountPath: /etc/kafka/secrets/certs
+              readOnly: true
+          env:
+            - name: KAFKA_BROKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper.streaming-pipeline.svc.cluster.local:2181" # TODO. Use 2281 for SSL
+            - name: KAFKA_LISTENERS
+              value: "INTERNAL://:9092,EXTERNAL://:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "INTERNAL://kafka-$(KAFKA_BROKER_ID).kafka-broker.streaming-pipeline.svc.cluster.local:9092,EXTERNAL://kafka-$(KAFKA_BROKER_ID).kafka-broker.streaming-pipeline.svc.cluster.local:9093"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "INTERNAL:SSL,EXTERNAL:SSL"
+            - name: KAFKA_SSL_CLIENT_AUTH
+              value: "required"
+            - name: KAFKA_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/jks/tls.keystore.jks"
+            - name: KAFKA_SSL_KEYSTORE_FILENAME # Required by confluent image
+              value: "jks/tls.keystore.jks"
+            - name: KAFKA_SSL_KEYSTORE_PASSWORD
+              value: "changeit" # Replace with a secure password
+            - name: KAFKA_SSL_KEY_CREDENTIALS # Required by confluent image (possibly)
+              value: "certs/tls.key"
+            - name: KAFKA_SSL_KEYSTORE_CREDENTIALS # Required by confluent image (possibly)
+              value: "certs/tls.key"
+            - name: KAFKA_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/jks/tls.truststore.jks"
+            - name: KAFKA_SSL_TRUSTSTORE_FILENAME # Required by confluent image
+              value: "jks/tls.truststore.jks"
+            - name: KAFKA_SSL_TRUSTSTORE_CREDENTIALS # Required by confluent image (possibly)
+              value: "certs/tls.key"
+            - name: KAFKA_SSL_TRUSTSTORE_PASSWORD
+              value: "changeit" # Replace with a secure password
       volumes:
-      - name: kafka-config
-        configMap:
-          name: kafka-config
-      - name: kafka-certs
-        projected:
-          sources:
-          - secret:
-              name: kafka-broker-0-tls
-          - secret:
-              name: kafka-broker-1-tls
-          - secret:
-              name: kafka-broker-2-tls
-  volumeClaimTemplates:
-  - metadata:
-      name: kafka-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 10Gi
+        - name: broker-tls
+          secret:
+            secretName: kafka-broker-tls
+        - name: secrets-volume
+          emptyDir: {}

@@ -1,0 +1,52 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kafka-issuer
+  namespace: streaming-pipeline
+spec:
+  ca:
+    secretName: intermediate-ca-key-pair
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-broker-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: kafka-broker-tls
+  commonName: kafka-broker.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - kafka-broker.streaming-pipeline.svc.cluster.local
+    - kafka-0 # hostname for broker 0
+    - kafka-1 # hostname for broker 1
+    - kafka-2 # hostname for broker 2
+    - kafka-0.kafka-broker
+    - kafka-0.kafka-broker.streaming-pipeline.svc.cluster.local
+    - kafka-1.kafka-broker
+    - kafka-1.kafka-broker.streaming-pipeline.svc.cluster.local
+    - kafka-2.kafka-broker
+    - kafka-2.kafka-broker.streaming-pipeline.svc.cluster.local
+    - "*.kafka-broker.streaming-pipeline.svc.cluster.local"
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer
+  usages:
+    - server auth
+    - client auth
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: zookeeper-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: zookeeper-tls
+  commonName: zookeeper.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - zookeeper.streaming-pipeline.svc.cluster.local
+  issuerRef:
+    name: kafka-issuer
+    kind: Issuer
+  usages:
+    - server auth
+    - client auth
