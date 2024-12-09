@@ -1,0 +1,118 @@
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: mongodb
+#   namespace: streaming-pipeline
+# spec:
+#   serviceName: "mongodb"
+#   replicas: 3
+#   selector:
+#     matchLabels:
+#       app: mongodb
+#   template:
+#     metadata:
+#       labels:
+#         app: mongodb
+#     spec:
+#       containers:
+#       - name: mongodb
+#         image: mongo:6.0
+#         args: 
+#           - "--tlsMode"
+#           - "requireTLS"
+#           - "--tlsCertificateKeyFile"
+#           - "/tls/mongo.pem"
+#           - "--tlsCAFile"
+#           - "/tls/ca.pem"
+#         ports:
+#         - containerPort: 27017
+#         volumeMounts:
+#         - name: tls-certs
+#           mountPath: /tls
+#           readOnly: true
+#       volumes:
+#       - name: tls-certs
+#         projected:
+#           sources:
+#           - secret:
+#               name: mongo-server-tls
+#               items:
+#               - key: tls.crt
+#                 path: mongo.crt
+#               - key: tls.key
+#                 path: mongo.key
+#           - secret:
+#               name: intermediate-ca-key-pair
+#               items:
+#               - key: ca.crt
+#                 path: ca.pem
+# ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: streaming-pipeline
+spec:
+  serviceName: "mongodb"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      initContainers:
+      - name: create-mongo-pem
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          cat /tls/tls.key /tls/tls.crt > /tls-combined/mongo.pem
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls
+        - name: tls-combined
+          mountPath: /tls-combined
+      containers:
+      - name: mongodb
+        image: mongo:6.0
+        args:
+        - "--tlsMode"
+        - "requireTLS"
+        - "--tlsCertificateKeyFile"
+        - "/tls/mongo.pem"
+        - "--tlsCAFile"
+        - "/tls/ca.pem"
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: tls-combined
+          mountPath: /tls
+          readOnly: true
+        - name: tls-certs-ca
+          mountPath: /tls-ca
+          readOnly: true
+      volumes:
+      - name: tls-certs
+        projected:
+          sources:
+          - secret:
+              name: mongo-server-tls
+              items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+      - name: tls-certs-ca
+        projected:
+          sources:
+          - secret:
+              name: intermediate-ca-key-pair
+              items:
+              - key: ca.crt
+                path: ca.pem
+      - name: tls-combined
+        emptyDir: {}

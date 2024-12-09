@@ -1,0 +1,35 @@
+# ca.pem
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: mongo-ca-cert
+#   namespace: streaming-pipeline
+# spec:
+#   secretName: mongo-ca-tls
+#   duration: 2160h # 90d
+#   renewBefore: 360h # 15d
+#   issuerRef:
+#     name: intermediate-ca
+#   isCA: true
+#   commonName: intermediate.streaming-pipeline.svc.cluster.local # kubectl fails to apply w/o this line
+#   usages:
+#     - cert sign
+# ---
+# mongo.pem
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mongo-server-cert
+  namespace: streaming-pipeline
+spec:
+  secretName: mongo-server-tls
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  issuerRef:
+    name: intermediate-ca
+  commonName: mongodb.streaming-pipeline.svc.cluster.local
+  dnsNames:
+    - mongodb.streaming-pipeline.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
