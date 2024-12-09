@@ -79,13 +79,15 @@ spec:
       containers:
       - name: mongodb
         image: mongo:6.0
+        # command: [ "/bin/bash", "-c", "--" ]
+        # args: [ "while true; do sleep 30; done;" ]
         args:
         - "--tlsMode"
         - "requireTLS"
         - "--tlsCertificateKeyFile"
         - "/tls/mongo.pem"
         - "--tlsCAFile"
-        - "/tls/ca.pem"
+        - "/tls-ca/ca.pem"
         ports:
         - containerPort: 27017
         volumeMounts:
