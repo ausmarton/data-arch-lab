@@ -39,6 +39,12 @@ kubectl apply -f producer-consumer/
 - Update secrets in secrets/kafka-tls.yaml with your Base64-encoded certificates.
 - Adjust resource limits in deployment files for production use.
 
+## MongoDB
+Logging into a mongo server via mongosh. This requires SSL (as configured)
+```bash
+mongosh "mongodb://mongodb.streaming-pipeline.svc.cluster.local:27017" --tls --tlsCertificateKeyFile /tls/mongo.pem --tlsCAFile /tls-ca/ca.pem
+```
+
 
 ### Additional steps (pre-requisites)
 Installs all necessary resources, including the CustomResourceDefinitions and the cert-manager, cainjector, and webhook components, without requiring Helm
@@ -55,3 +61,11 @@ List all installed components
 ```bash
 kubectl get all -n cert-manager
 ```
+
+## Issues to be resolved
+### Mongo collections sync
+Mongo databases and collections created in a node via `mongosh` don't appear to be replicated across the cluster.
+Investigate if this is due to eventual consistency or if it indeed is a connectivity problem
+### Kafka producer keeps restarting after publishing messages
+- Producer could potentially be a `Job`
+- K8s thinks it's a crashed pod and tries to restart it
